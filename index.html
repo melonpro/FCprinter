@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>灵感记录卡带</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 html2canvas 用于生成图片 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- 引入 Google Fonts: DotGothic16 (像素中文), Press Start 2P (像素英文) -->
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Famicom 风格颜色变量 */
+        :root {
+            --nes-red: #ff0000;      /* 鲜红 */
+            --nes-dark-red: #8b0000; /* 深红/暗红 */
+            --nes-white: #f8f8f8;    /* 米白 */
+            --nes-black: #212529;    /* 深灰黑 */
+            --nes-gold: #f7d51d;     /* 卡带金手指色 */
+        }
+
+        /* 基础重置 */
+        body {
+            font-family: 'DotGothic16', sans-serif; /* 像素风格中文字体 */
+            background-color: var(--nes-white); 
+            color: var(--nes-black); 
+            line-height: 1.5;
+            overscroll-behavior-y: none;
+            padding-bottom: 20px;
+        }
+
+        /* 英文数字使用更像素化的字体 */
+        .pixel-en {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.8em;
+        }
+
+        /* 交互式按钮的像素风格 */
+        .nes-btn {
+            position: relative;
+            display: inline-block;
+            padding: 10px 16px;
+            margin: 4px;
+            text-align: center;
+            vertical-align: middle;
+            cursor: pointer;
+            user-select: none;
+            font-family: 'DotGothic16', sans-serif;
+            font-size: 16px;
+            border: 4px solid var(--nes-black);
+            background-color: var(--nes-white);
+            color: var(--nes-black);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 主要按钮 (红色) */
+        .nes-btn.is-primary {
+            background-color: var(--nes-red);
+            color: white;
+            border-color: var(--nes-dark-red);
+            box-shadow: inset -4px -4px 0px 0px rgba(0,0,0,0.2);
+        }
+        .nes-btn.is-primary:active {
+            box-shadow: inset 4px 4px 0px 0px rgba(0,0,0,0.2);
+        }
+
+        /* 次要按钮 (深色) */
+        .nes-btn.is-dark {
+            background-color: var(--nes-black);
+            color: var(--nes-gold);
+            border-color: black;
+        }
+
+        /* 输入框像素风 */
+        .nes-input {
+            border: 4px solid var(--nes-black);
+            padding: 12px;
+            width: 100%;
+            background-color: white;
+            font-family: 'DotGothic16', sans-serif;
+            font-size: 18px; 
+            outline: none;
+            box-shadow: inset 4px 4px 0px 0px #ddd;
+        }
+        .nes-input:focus {
+            box-shadow: inset 4px 4px 0px 0px #ccc;
+        }
+
+        /* 标题栏风格 - 模拟卡带标签 */
+        .cartridge-header {
+            background: var(--nes-dark-red);
+            color: white;
+            padding: 15px;
+            border-bottom: 6px solid var(--nes-black);
+            text-align: center;
+            position: relative;
+        }
+        .cartridge-stripes {
+            height: 10px;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--nes-black),
+                var(--nes-black) 2px,
+                transparent 2px,
+                transparent 8px
+            );
+            margin-bottom: 10px;
+            opacity: 0.3;
+        }
+
+        /* 卡片特定样式 */
+        .note-card {
+            background-color: white;
+            margin-bottom: 24px;
+            position: relative;
+            /* 像素边框 */
+            box-shadow: 
+                -4px 0 0 0 var(--nes-black), 
+                4px 0 0 0 var(--nes-black), 
+                0 -4px 0 0 var(--nes-black), 
+                0 4px 0 0 var(--nes-black);
+            margin-left: 4px;
+            margin-right: 4px;
+        }
+        
+        /* 装饰用的角落钉子 */
+        .corner-screw {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #ccc;
+            border: 1px solid #999;
+            border-radius: 50%;
+        }
+        .tl { top: 6px; left: 6px; }
+        .tr { top: 6px; right: 6px; }
+        .bl { bottom: 6px; left: 6px; }
+        .br { bottom: 6px; right: 6px; }
+
+        /* 扫描线效果 */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* 加载中遮罩 (仅用于生成图片) */
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            color: var(--nes-gold);
+            font-family: 'Press Start 2P', cursive;
+        }
+    </style>
+
+    <script>
+        // === 单机版逻辑：使用 localStorage ===
+        
+        const STORAGE_KEY = 'nes_inspiration_notes_v1';
+        
+        // 获取本地笔记
+        function getLocalNotes() {
+            const notes = localStorage.getItem(STORAGE_KEY);
+            return notes ? JSON.parse(notes) : [];
+        }
+
+        // 保存笔记到本地
+        function saveNotesToStorage(notes) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+        }
+
+        // 初始化加载
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNotes();
+            updateSystemMsg('SYSTEM READY');
+        });
+
+        // 渲染笔记列表
+        function renderNotes() {
+            const notesContainer = document.getElementById('notes-container');
+            const notes = getLocalNotes();
+            
+            // 按时间倒序排序 (最新的在前面)
+            notes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            notesContainer.innerHTML = '';
+
+            if (notes.length === 0) {
+                notesContainer.innerHTML = `
+                    <div class="text-center p-8 opacity-50">
+                        <div class="pixel-en text-2xl mb-2">INSERT COIN</div>
+                        <div class="text-sm">暂无灵感记录</div>
+                    </div>`;
+                return;
+            }
+
+            notes.forEach(note => {
+                // 处理时间显示
+                const date = new Date(note.timestamp);
+                const dateStr = date.toLocaleString('zh-CN', { 
+                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' 
+                }).replace(/\//g, '-');
+
+                const card = document.createElement('div');
+                card.className = 'note-card p-4 relative';
+                card.id = `card-${note.id}`;
+
+                // 生成卡片 HTML
+                card.innerHTML = `
+                    <div class="corner-screw tl"></div>
+                    <div class="corner-screw tr"></div>
+                    <div class="corner-screw bl"></div>
+                    <div class="corner-screw br"></div>
+                    
+                    <div class="mb-4 text-lg font-bold break-words leading-relaxed" id="content-${note.id}">${note.content}</div>
+                    
+                    <div class="flex justify-between items-end border-t-4 border-dashed border-gray-300 pt-3 mt-2">
+                        <div class="pixel-en text-xs text-gray-500">
+                            DATE: ${dateStr}<br>
+                            MEM: 0X${note.id.substring(note.id.length-4).toUpperCase()}
+                        </div>
+                        <div class="flex space-x-2 z-10">
+                            <button onclick="saveCardAsImage('${note.id}')" class="nes-btn is-dark" style="padding: 4px 8px; font-size: 12px;">
+                                📸 SAVE
+                            </button>
+                            <button onclick="confirmDelete('${note.id}')" class="nes-btn" style="padding: 4px 8px; font-size: 12px; color: red;">
+                                ✖ DEL
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 水印 -->
+                    <div class="image-watermark hidden text-center mt-2 text-xs text-gray-400 pixel-en">
+                        - INSPIRATION COLLECTOR -
+                    </div>
+                `;
+                notesContainer.appendChild(card);
+            });
+        }
+
+        // 添加笔记
+        function addNote() {
+            const noteInput = document.getElementById('note-input');
+            const content = noteInput.value.trim();
+            
+            if (content.length === 0) {
+                updateSystemMsg('ERROR: EMPTY INPUT');
+                return;
+            }
+
+            const notes = getLocalNotes();
+            const newNote = {
+                id: Date.now().toString(), // 使用时间戳作为简单ID
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+
+            notes.push(newNote);
+            saveNotesToStorage(notes);
+            
+            // 震动反馈
+            if(navigator.vibrate) navigator.vibrate(50);
+            
+            noteInput.value = '';
+            updateSystemMsg('SAVED TO MEMORY!');
+            renderNotes();
+        }
+
+        // 删除笔记
+        function deleteNote(id) {
+            let notes = getLocalNotes();
+            notes = notes.filter(note => note.id !== id);
+            saveNotesToStorage(notes);
+            updateSystemMsg('DELETED');
+            renderNotes();
+        }
+
+        // 系统消息更新
+        function updateSystemMsg(text) {
+            const msgBox = document.getElementById('system-msg');
+            if(msgBox) msgBox.innerText = `> ${text}`;
+        }
+
+        // === 图片生成逻辑 (修复版) ===
+        window.saveCardAsImage = async function(cardId) {
+            const card = document.getElementById(`card-${cardId}`);
+            if (!card) return;
+
+            const loader = document.getElementById('loading-overlay');
+            loader.style.display = 'flex';
+
+            // 1. 克隆卡片，而不是直接修改原卡片
+            const clonedCard = card.cloneNode(true);
+
+            // 2. 修改克隆卡片的样式用于生成图片
+            clonedCard.style.transform = 'none';
+            clonedCard.style.margin = '0';
+            clonedCard.style.width = '350px'; // 固定宽度，保证图片一致性
+            clonedCard.style.backgroundColor = '#f8f8f8'; // 确保背景不透明
+
+            // 在克隆卡片上隐藏按钮
+            const buttons = clonedCard.querySelectorAll('button');
+            buttons.forEach(b => b.style.display = 'none');
+
+            // 在克隆卡片上显示水印
+            const watermark = clonedCard.querySelector('.image-watermark');
+            if(watermark) watermark.classList.remove('hidden');
+
+            // 3. 创建临时容器
+            const container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.top = '-9999px';
+            container.style.left = '-9999px';
+            container.style.padding = '20px';
+            container.style.backgroundColor = '#8b0000'; // 红色背景
+            // 确保容器宽度足够容纳固定宽度的卡片
+            container.style.width = '390px'; // 350px card + 20px padding * 2
+
+            // 将修改后的克隆卡片加入容器
+            container.appendChild(clonedCard);
+            document.body.appendChild(container);
+
+            try {
+                // 4. 生成 Canvas
+                const canvas = await html2canvas(container, {
+                    scale: 3, // 高清
+                    useCORS: true,
+                    backgroundColor: '#8b0000',
+                    logging: false
+                });
+
+                // 5. 触发下载
+                const link = document.createElement('a');
+                link.download = `NES_NOTE_${cardId.substring(cardId.length-5)}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                
+                updateSystemMsg('IMAGE CAPTURED!');
+
+            } catch (err) {
+                console.error(err);
+                updateSystemMsg('RENDER ERROR');
+            } finally {
+                // 6. 清理
+                document.body.removeChild(container);
+                // 不需要还原原卡片的样式，因为我们修改的是克隆体
+                loader.style.display = 'none';
+            }
+        }
+
+        // 模态框逻辑
+        let currentDeleteId = null;
+        function confirmDelete(id) {
+            currentDeleteId = id;
+            document.getElementById('confirmation-modal').style.display = 'flex';
+        }
+        
+        // 绑定事件到 window 以便 HTML onclick 调用
+        window.confirmDelete = confirmDelete;
+        window.deleteNote = deleteNote; // 供模态框确认按钮使用
+        
+        // 页面加载完成后绑定按钮事件
+        window.onload = function() {
+            document.getElementById('add-note-btn').onclick = addNote;
+            
+            document.getElementById('modal-confirm-btn').onclick = () => {
+                if(currentDeleteId) deleteNote(currentDeleteId);
+                document.getElementById('confirmation-modal').style.display = 'none';
+            };
+            document.getElementById('modal-cancel-btn').onclick = () => {
+                document.getElementById('confirmation-modal').style.display = 'none';
+            };
+        };
+
+    </script>
+</head>
+<body class="min-h-screen pb-10">
+    <div class="scanlines"></div>
+
+    <!-- 加载遮罩 (仅在生成图片时显示) -->
+    <div id="loading-overlay">
+        <div>PROCESSING...</div>
+    </div>
+
+    <!-- 卡带头部 -->
+    <header class="cartridge-header shadow-lg mb-6">
+        <div class="cartridge-stripes"></div>
+        <div class="flex justify-between items-center px-2">
+            <h1 class="text-2xl md:text-3xl font-bold tracking-widest text-white drop-shadow-md">
+                <span class="pixel-en text-yellow-300">FC</span> 灵感机
+            </h1>
+            <div id="player-id" class="pixel-en text-xs text-yellow-300 bg-black px-2 py-1">P1: LOCAL</div>
+        </div>
+        <div id="system-msg" class="pixel-en text-xs mt-2 text-left text-green-300 font-mono h-4">> READY</div>
+    </header>
+
+    <div class="max-w-md mx-auto px-4">
+        <!-- 控制台输入区 -->
+        <div class="bg-black p-1 mb-8" style="box-shadow: 4px 4px 0px 0px rgba(0,0,0,0.3);">
+            <div class="bg-gray-800 p-3 border-2 border-gray-600">
+                <label class="block text-white mb-2 pixel-en text-xs text-left">INPUT DATA:</label>
+                <textarea id="note-input" rows="3" placeholder="输入灵感..."
+                    class="nes-input mb-3" style="border-radius: 0;"></textarea>
+                
+                <button id="add-note-btn" class="nes-btn is-primary w-full text-lg font-bold tracking-widest">
+                    INSERT <span class="pixel-en">START</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 列表区 -->
+        <div class="flex items-center mb-4">
+             <div class="bg-red-600 w-4 h-4 mr-2 border-2 border-black"></div>
+             <h2 class="text-xl font-bold">MEMORY CARD</h2>
+        </div>
+        
+        <div id="notes-container" class="grid grid-cols-1 gap-4">
+            <!-- 笔记列表 -->
+        </div>
+    </div>
+
+    <!-- 像素风模态框 -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-80 hidden items-center justify-center z-50">
+        <div class="bg-white p-1 border-4 border-white" style="box-shadow: 0 0 0 4px black;">
+            <div class="border-4 border-black p-6 text-center bg-white min-w-[280px]">
+                <p class="text-lg mb-6 font-bold">DELETE DATA?</p>
+                <div class="flex justify-center space-x-4">
+                    <button id="modal-confirm-btn" class="nes-btn is-primary">YES</button>
+                    <button id="modal-cancel-btn" class="nes-btn">NO</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
